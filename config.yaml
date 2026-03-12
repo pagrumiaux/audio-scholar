@@ -1,6 +1,4 @@
-# AudioScholar Configuration
-
-# Paths (relative to project root, or absolute)
+# Paths
 paths:
   database: "db/audio_scholar.db"
   chroma: "db/chroma"
@@ -19,7 +17,7 @@ database:
   timeout: 30
   wal_mode: true
 
-# Scraping (Phase 2)
+# Scraping
 scraping:
   arxiv:
     rate_limit: 3.0
@@ -31,19 +29,19 @@ scraping:
     rate_limit: 1.0
     max_retries: 3
 
-# PDF Processing (Phase 1)
+# PDF Processing
 pdf:
   extractor: "pymupdf"
   download_timeout: 60
   max_file_size_mb: 50
 
-# Embeddings (Phase 3)
+# Embeddings
 embeddings:
   model: "all-MiniLM-L6-v2"
   batch_size: 32
   device: "auto"
 
-# LLM (Phase 4)
+# LLM
 llm:
   provider: "ollama"
   model: "llama3.1:8b"
@@ -51,7 +49,7 @@ llm:
   context_length: 8192
   temperature: 0.7
 
-# RAG (Phase 4)
+# RAG
 rag:
   top_k: 10
   min_similarity: 0.5

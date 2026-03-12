@@ -1,22 +1,11 @@
-"""Configuration loading and validation for AudioScholar.
-
-This module provides a typed configuration system that:
-- Loads settings from config.yaml
-- Validates all values (fails on unknown keys)
-- Provides sensible defaults
-- Resolves relative paths to absolute paths
-"""
+"""Configuration loading and validation."""
 
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Optional, Set
+from typing import Optional, Set
 
 import yaml
 
-
-# =============================================================================
-# Configuration Dataclasses
-# =============================================================================
 
 @dataclass
 class PathsConfig:
@@ -107,10 +96,6 @@ class Config:
     _project_root: Path = field(default=None, repr=False)
 
 
-# =============================================================================
-# Configuration Loading
-# =============================================================================
-
 def load_config(config_path: Optional[Path] = None) -> Config:
     """Load configuration from YAML file.
 
@@ -120,15 +105,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
 
     Returns:
         Validated Config object with resolved paths.
-
-    Raises:
-        FileNotFoundError: If config file not found.
-        ValueError: If config validation fails.
     """
-    if config_path is None:
-        config_path = _find_config_file()
-    else:
-        config_path = Path(config_path)
+    config_path = Path(config_path)
 
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
@@ -144,53 +122,32 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     return config
 
 
-def _find_config_file() -> Path:
-    """Search upward from current directory for config.yaml."""
-    current = Path.cwd()
-    for parent in [current] + list(current.parents):
-        candidate = parent / "config.yaml"
-        if candidate.exists():
-            return candidate
-    raise FileNotFoundError(
-        "config.yaml not found in current directory or any parent directory"
-    )
-
-
-# =============================================================================
-# Parsing
-# =============================================================================
 
 def _parse_config(raw: dict, project_root: Path) -> Config:
     """Parse raw YAML dict into Config dataclass."""
 
-    # Check for unknown top-level keys
+    # Check for unknown keys
     known_keys = {"paths", "logging", "database", "scraping", "pdf",
                   "embeddings", "llm", "rag"}
     _check_unknown_keys(raw, known_keys, "root")
 
-    # Parse paths (required)
+    # Parse paths (special handling for path resolution)
     if "paths" not in raw:
         raise ValueError("Missing required section: 'paths'")
     paths = _parse_paths(raw["paths"], project_root)
 
     # Parse optional sections with defaults
-    logging_config = _parse_logging(raw.get("logging", {}))
-    database_config = _parse_database(raw.get("database", {}))
     scraping_config = _parse_scraping(raw.get("scraping", {}))
-    pdf_config = _parse_pdf(raw.get("pdf", {}))
-    embeddings_config = _parse_embeddings(raw.get("embeddings", {}))
-    llm_config = _parse_llm(raw.get("llm", {}))
-    rag_config = _parse_rag(raw.get("rag", {}))
 
     return Config(
         paths=paths,
-        logging=logging_config,
-        database=database_config,
+        logging=_parse_section(raw.get("logging", {}), LoggingConfig, "logging"),
+        database=_parse_section(raw.get("database", {}), DatabaseConfig, "database"),
         scraping=scraping_config,
-        pdf=pdf_config,
-        embeddings=embeddings_config,
-        llm=llm_config,
-        rag=rag_config,
+        pdf=_parse_section(raw.get("pdf", {}), PdfConfig, "pdf"),
+        embeddings=_parse_section(raw.get("embeddings", {}), EmbeddingsConfig, "embeddings"),
+        llm=_parse_section(raw.get("llm", {}), LlmConfig, "llm"),
+        rag=_parse_section(raw.get("rag", {}), RagConfig, "rag"),
         _project_root=project_root,
     )
 
@@ -204,11 +161,24 @@ def _check_unknown_keys(data: dict, known: Set[str], context: str) -> None:
         raise ValueError(f"Unknown keys in {context}: {unknown}")
 
 
+def _parse_section(raw: dict, cls: type, context: str):
+    """Parse a config section into a dataclass using its field definitions."""
+    # Check for unknown keys
+    known_keys = {f.name for f in fields(cls)}
+    _check_unknown_keys(raw, known_keys, context)
+    
+    # Only pass keys present in raw; dataclass defaults handle the rest
+    kwargs = {k: v for k, v in raw.items() if k in known_keys}
+    return cls(**kwargs)
+
+
 def _parse_paths(raw: dict, project_root: Path) -> PathsConfig:
     """Parse paths section."""
+    # Check for unknown keys
     known_keys = {"database", "chroma", "pdfs", "raw", "logs"}
     _check_unknown_keys(raw, known_keys, "paths")
 
+    # Check for required keys
     required = ["database", "chroma", "pdfs", "raw", "logs"]
     for key in required:
         if key not in raw:
@@ -220,6 +190,7 @@ def _parse_paths(raw: dict, project_root: Path) -> PathsConfig:
             path = project_root / path
         return path
 
+    # Return config
     return PathsConfig(
         database=resolve_path(raw["database"]),
         chroma=resolve_path(raw["chroma"]),
@@ -229,104 +200,19 @@ def _parse_paths(raw: dict, project_root: Path) -> PathsConfig:
     )
 
 
-def _parse_logging(raw: dict) -> LoggingConfig:
-    """Parse logging section."""
-    known_keys = {"level", "format", "file"}
-    _check_unknown_keys(raw, known_keys, "logging")
-
-    return LoggingConfig(
-        level=raw.get("level", LoggingConfig.level),
-        format=raw.get("format", LoggingConfig.format),
-        file=raw.get("file", LoggingConfig.file),
-    )
-
-
-def _parse_database(raw: dict) -> DatabaseConfig:
-    """Parse database section."""
-    known_keys = {"timeout", "wal_mode"}
-    _check_unknown_keys(raw, known_keys, "database")
-
-    return DatabaseConfig(
-        timeout=raw.get("timeout", DatabaseConfig.timeout),
-        wal_mode=raw.get("wal_mode", DatabaseConfig.wal_mode),
-    )
-
-
-def _parse_scraper(raw: dict, context: str) -> ScraperConfig:
-    """Parse a single scraper config."""
-    known_keys = {"rate_limit", "max_retries"}
-    _check_unknown_keys(raw, known_keys, context)
-
-    return ScraperConfig(
-        rate_limit=raw.get("rate_limit", ScraperConfig.rate_limit),
-        max_retries=raw.get("max_retries", ScraperConfig.max_retries),
-    )
-
-
 def _parse_scraping(raw: dict) -> ScrapingConfig:
-    """Parse scraping section."""
+    """Parse scraping section (nested structure needs special handling)."""
+    # Check for unknown keys
     known_keys = {"arxiv", "ismir", "icassp"}
     _check_unknown_keys(raw, known_keys, "scraping")
 
+    # Return config
     return ScrapingConfig(
-        arxiv=_parse_scraper(raw.get("arxiv", {}), "scraping.arxiv"),
-        ismir=_parse_scraper(raw.get("ismir", {}), "scraping.ismir"),
-        icassp=_parse_scraper(raw.get("icassp", {}), "scraping.icassp"),
+        arxiv=_parse_section(raw.get("arxiv", {}), ScraperConfig, "scraping.arxiv"),
+        ismir=_parse_section(raw.get("ismir", {}), ScraperConfig, "scraping.ismir"),
+        icassp=_parse_section(raw.get("icassp", {}), ScraperConfig, "scraping.icassp"),
     )
 
-
-def _parse_pdf(raw: dict) -> PdfConfig:
-    """Parse pdf section."""
-    known_keys = {"extractor", "download_timeout", "max_file_size_mb"}
-    _check_unknown_keys(raw, known_keys, "pdf")
-
-    return PdfConfig(
-        extractor=raw.get("extractor", PdfConfig.extractor),
-        download_timeout=raw.get("download_timeout", PdfConfig.download_timeout),
-        max_file_size_mb=raw.get("max_file_size_mb", PdfConfig.max_file_size_mb),
-    )
-
-
-def _parse_embeddings(raw: dict) -> EmbeddingsConfig:
-    """Parse embeddings section."""
-    known_keys = {"model", "batch_size", "device"}
-    _check_unknown_keys(raw, known_keys, "embeddings")
-
-    return EmbeddingsConfig(
-        model=raw.get("model", EmbeddingsConfig.model),
-        batch_size=raw.get("batch_size", EmbeddingsConfig.batch_size),
-        device=raw.get("device", EmbeddingsConfig.device),
-    )
-
-
-def _parse_llm(raw: dict) -> LlmConfig:
-    """Parse llm section."""
-    known_keys = {"provider", "model", "endpoint", "context_length", "temperature"}
-    _check_unknown_keys(raw, known_keys, "llm")
-
-    return LlmConfig(
-        provider=raw.get("provider", LlmConfig.provider),
-        model=raw.get("model", LlmConfig.model),
-        endpoint=raw.get("endpoint", LlmConfig.endpoint),
-        context_length=raw.get("context_length", LlmConfig.context_length),
-        temperature=raw.get("temperature", LlmConfig.temperature),
-    )
-
-
-def _parse_rag(raw: dict) -> RagConfig:
-    """Parse rag section."""
-    known_keys = {"top_k", "min_similarity"}
-    _check_unknown_keys(raw, known_keys, "rag")
-
-    return RagConfig(
-        top_k=raw.get("top_k", RagConfig.top_k),
-        min_similarity=raw.get("min_similarity", RagConfig.min_similarity),
-    )
-
-
-# =============================================================================
-# Validation
-# =============================================================================
 
 def _validate_config(config: Config) -> None:
     """Validate configuration values."""

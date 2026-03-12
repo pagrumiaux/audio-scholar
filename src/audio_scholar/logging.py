@@ -1,15 +1,7 @@
-"""Logging setup for AudioScholar.
-
-This module configures logging for the entire application:
-- Console output (always)
-- File output (configurable)
-- Consistent formatting
-"""
+"""Logging setup."""
 
 import logging
 import sys
-from pathlib import Path
-from typing import Optional
 
 from audio_scholar.config import Config
 
@@ -25,8 +17,6 @@ def setup_logging(config: Config) -> logging.Logger:
     """
     # Get the root logger for our package
     logger = logging.getLogger("audio_scholar")
-
-    # Clear any existing handlers (useful for testing)
     logger.handlers.clear()
 
     # Set level
@@ -36,13 +26,13 @@ def setup_logging(config: Config) -> logging.Logger:
     # Create formatter
     formatter = logging.Formatter(config.logging.format)
 
-    # Console handler (always enabled)
+    # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    # File handler (if logs directory exists or can be created)
+    # File handler
     log_dir = config.paths.logs
     if log_dir:
         try:
@@ -69,11 +59,6 @@ def get_logger(name: str) -> logging.Logger:
 
     Returns:
         Logger instance.
-
-    Example:
-        >>> from audio_scholar.logging import get_logger
-        >>> logger = get_logger(__name__)
-        >>> logger.info("Processing started")
     """
     # Ensure the name is under our package namespace
     if not name.startswith("audio_scholar"):
