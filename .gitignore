@@ -55,3 +55,7 @@ Thumbs.db
 
 # Keep directory structure
 !.gitkeep
+
+# Claude stuff
+.claude/
+CLAUDE*
