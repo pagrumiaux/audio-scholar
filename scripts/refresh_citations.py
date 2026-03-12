@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """Refresh citation counts for all papers.
 
-This script recalculates citation_count for every paper
-based on the citations table.
-
 Usage:
     python scripts/refresh_citations.py
 """
